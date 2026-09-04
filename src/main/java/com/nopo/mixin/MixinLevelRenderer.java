@@ -1,12 +1,9 @@
 package com.nopo.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.nopo.mixininterfaces.FunnyEntityData;
 import com.nopo.utils.HypixelUtils;
 import com.nopo.utils.IslandType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -17,20 +14,19 @@ import net.minecraft.world.entity.animal.sheep.Sheep;
 import net.minecraft.world.entity.monster.Ravager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(LevelExtractor.class)
+@Mixin(EntityRenderDispatcher.class)
 public class MixinLevelRenderer {
 
-    @WrapOperation(
-        method = "extractVisibleEntities",
-        at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;extractEntity(Lnet/minecraft/world/entity/Entity;F)Lnet/minecraft/client/renderer/entity/state/EntityRenderState;"
-        )
-    )
-    public EntityRenderState ravage(EntityRenderDispatcher instance, Entity entity, float f, Operation<EntityRenderState> original) {
-        if (HypixelUtils.INSTANCE.getCurrentIsland() != IslandType.DUNGEON || !(entity instanceof Sheep sheep) || !(sheep instanceof FunnyEntityData data) || !data.nopo$isFunny()) {
-            return original.call(instance, entity, f);
+    @Inject(method = "extractEntity", at = @At("HEAD"), cancellable = true)
+    private <E extends Entity> void ravage(E entity, float f, CallbackInfoReturnable<EntityRenderState> cir) {
+        if (HypixelUtils.INSTANCE.getCurrentIsland() != IslandType.DUNGEON
+                || !(entity instanceof Sheep sheep)
+                || !(sheep instanceof FunnyEntityData data)
+                || !data.nopo$isFunny()) {
+            return;
         }
 
         @SuppressWarnings("unchecked")
@@ -45,6 +41,7 @@ public class MixinLevelRenderer {
         ravager.yHeadRotO = sheep.yHeadRotO;
         ravager.setPos(sheep.position());
         ravager.copyPosition(sheep);
-        return original.call(instance, ravager, f);
+
+        cir.setReturnValue(((EntityRenderDispatcher) (Object) this).extractEntity(ravager, f));
     }
 }
