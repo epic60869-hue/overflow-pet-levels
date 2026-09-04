@@ -22,13 +22,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
+          curl -fsSL https://github.com/NopoTheGamer/NopoMod/archive/refs/heads/master.tar.gz -o /tmp/nopo.tar.gz
+          mkdir -p /tmp/nopo
+          tar -xzf /tmp/nopo.tar.gz -C /tmp/nopo --strip-components=1
 
-          # Remove the old project files but keep the destination Git metadata.
+          # Remove the old project files while keeping the destination Git metadata.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-
-          # Copy the complete NopoMod tree without copying its .git directory.
-          rsync -a --exclude='.git' /tmp/NopoMod/ ./
+          cp -a /tmp/nopo/. .
 
           # 26.2 toolchain.
           sed -i \
@@ -47,22 +47,14 @@ jobs:
             -e 's/JavaVersion\.VERSION_21/JavaVersion.VERSION_25/g' \
             build.gradle.kts
 
-          # 26.2-compatible compile-only integrations.
-          sed -i \
-            -e 's/maven\.modrinth:byNkmv5G:[^\"]*/maven.modrinth:byNkmv5G:AHyKg37k/' \
-            -e 's/maven\.modrinth:dIczrQAR:[^\"]*/maven.modrinth:dIczrQAR:xZCDr2tX/' \
-            build.gradle.kts
-
+          # Update the mod metadata for Minecraft 26.2 / Java 25.
           sed -i 's/minecraft": "~26\.1"/minecraft": "~26.2"/' src/main/resources/fabric.mod.json
           sed -i 's/"java": ">=21"/"java": ">=25"/' src/main/resources/fabric.mod.json
 
-          # Update copied upstream CI workflows to use Java 25 / Gradle 9.5.1.
+          # Update copied CI workflows to Java 25 where applicable.
           if [ -d .github/workflows ]; then
             find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | while IFS= read -r -d '' f; do
-              sed -i \
-                -e "s/java-version: ['\"]21['\"]/java-version: '25'/g" \
-                -e "s/gradle-version: ['\"][^'\"]*['\"]/gradle-version: '9.5.1'/g" \
-                "$f"
+              sed -i -e "s/java-version: ['\"]21['\"]/java-version: '25'/g" "$f"
             done
           fi
 
@@ -71,5 +63,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+          git status --short
           git commit -m "Replace project with NopoMod port for Minecraft 26.2"
-          git push origin HEAD:nopomod-26.2-replace --force
+          git push origin HEAD:nopomod-26.2-replace
