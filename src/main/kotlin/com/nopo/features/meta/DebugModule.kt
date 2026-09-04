@@ -14,7 +14,6 @@ import net.minecraft.client.gui.screens.ChatScreen
 import net.minecraft.network.chat.Component
 
 object DebugModule : FeatureModule("debug", NopoMod.config.debug, shouldBeHidden = { !Utils.isDevAllowed() }), IslandChange, ScoreboardChange, GuiRendering {
-
     override fun onWorldSwap(newIsland: IslandType, oldIsland: IslandType) {
         if (!config.enabled) return
         Utils.sendMessageToPlayer("new $newIsland old $oldIsland")
@@ -22,27 +21,17 @@ object DebugModule : FeatureModule("debug", NopoMod.config.debug, shouldBeHidden
 
     private val crapLines = Regex("(?:.*\\d+:\\d+[ap]m .)|(?:Carnival \\d+:\\d+:\\d+)")
 
-    override fun onScoreboardChange(
-        added: List<Component>,
-        removed: List<Component>,
-        new: List<Component>,
-        old: List<Component>,
-    ) {
+    override fun onScoreboardChange(added: List<Component>, removed: List<Component>, new: List<Component>, old: List<Component>) {
         if (!config.enabled) return
         val added = added.filterNot { crapLines.matches(it.string.cleanColor()) }
         val removed = removed.filterNot { crapLines.matches(it.string.cleanColor()) }
-
         if (added.isNotEmpty()) {
             Utils.sendMessageToPlayer("Added: ")
-            for (component in added) {
-                Utils.sendMessageToPlayer(component)
-            }
+            for (component in added) Utils.sendMessageToPlayer(component)
         }
         if (removed.isNotEmpty()) {
             Utils.sendMessageToPlayer("Removed: ")
-            for (component in removed) {
-                Utils.sendMessageToPlayer(component)
-            }
+            for (component in removed) Utils.sendMessageToPlayer(component)
         }
     }
 
@@ -51,7 +40,7 @@ object DebugModule : FeatureModule("debug", NopoMod.config.debug, shouldBeHidden
 
     override fun render(context: GuiGraphicsExtractor) {
         if (!config.enabled) return
-        val screen = Minecraft.getInstance().screen
+        val screen = Minecraft.getInstance().gui.screen()
         if (screen != null && screen !is ChatScreen) {
             val x = Minecraft.getInstance().mouseHandler.getScaledXPos(Minecraft.getInstance().window).toInt()
             val y = Minecraft.getInstance().mouseHandler.getScaledYPos(Minecraft.getInstance().window).toInt()
@@ -60,5 +49,4 @@ object DebugModule : FeatureModule("debug", NopoMod.config.debug, shouldBeHidden
         }
         context.text(Minecraft.getInstance().font, "x: $lastX y: $lastY", lastX, lastY, -1)
     }
-
 }
