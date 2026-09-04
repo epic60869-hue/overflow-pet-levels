@@ -6,7 +6,7 @@ import com.nopo.mixininterfaces.FunnyEntityData;
 import com.nopo.utils.HypixelUtils;
 import com.nopo.utils.IslandType;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.extract.LevelExtractor;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -18,10 +18,16 @@ import net.minecraft.world.entity.monster.Ravager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(LevelRenderer.class)
+@Mixin(LevelExtractor.class)
 public class MixinLevelRenderer {
 
-    @WrapOperation(method = "extractEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;extractEntity(Lnet/minecraft/world/entity/Entity;F)Lnet/minecraft/client/renderer/entity/state/EntityRenderState;"))
+    @WrapOperation(
+        method = "extractVisibleEntities",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;extractEntity(Lnet/minecraft/world/entity/Entity;F)Lnet/minecraft/client/renderer/entity/state/EntityRenderState;"
+        )
+    )
     public EntityRenderState ravage(EntityRenderDispatcher instance, Entity entity, float f, Operation<EntityRenderState> original) {
         if (HypixelUtils.INSTANCE.getCurrentIsland() != IslandType.DUNGEON || !(entity instanceof Sheep sheep) || !(sheep instanceof FunnyEntityData data) || !data.nopo$isFunny()) {
             return original.call(instance, entity, f);
