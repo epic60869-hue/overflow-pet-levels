@@ -1,0 +1,95 @@
+name: Release NopoMod
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (without the v prefix)'
+        required: true
+        default: '2.4.0'
+        type: string
+      prerelease:
+        description: 'Mark this release as a pre-release'
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Apply Minecraft 26.2 source fixes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find src/main/kotlin -type f -name '*.kt' -print0 | while IFS= read -r -d '' f; do
+            sed -i \
+              -e 's/Minecraft\.getInstance()\.setScreen(/Minecraft.getInstance().gui.setScreen(/g' \
+              -e 's/Minecraft\.getInstance()\.screen/Minecraft.getInstance().gui.screen()/g' \
+              -e 's/Minecraft\.getInstance()\.options\.hideGui/Minecraft.getInstance().gui.hud.isHidden/g' \
+              -e 's/Items\.LIGHT_GRAY_STAINED_GLASS_PANE/Items.STAINED_GLASS_PANE.pick(net.minecraft.world.item.DyeColor.LIGHT_GRAY)/g' \
+              -e 's/Items\.LIME_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.LIME)/g' \
+              -e 's/Items\.PINK_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.PINK)/g' \
+              -e 's/Items\.GRAY_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.GRAY)/g' \
+              "$f"
+          done
+
+      - name: Build mod
+        run: ./gradlew clean build
+
+      - name: Determine release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="${{ inputs.version }}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ inputs.prerelease || false }}
+        run: |
+          TAG="v${VERSION}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading the new build instead."
+            gh release upload "$TAG" build/libs/*.jar --clobber
+          else
+            FLAGS=(--title "NopoMod $TAG" --generate-notes)
+            if [[ "$PRERELEASE" == "true" ]]; then
+              FLAGS+=(--prerelease)
+            fi
+            gh release create "$TAG" build/libs/*.jar "${FLAGS[@]}"
+          fi
