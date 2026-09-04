@@ -20,24 +20,14 @@ jobs:
 
       - name: Replace repository with NopoMod
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
 
-          # Remove every old project file but keep this checkout's Git metadata.
+          # Remove the old project files while keeping the checkout's Git metadata.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 
-          # Copy the complete NopoMod repository.
-          cp -a /tmp/NopoMod/. .
-          rm -rf .git
-          git init
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch origin nopomod-26.2-replace
-          git reset --hard FETCH_HEAD
-
-          # Re-apply the copied source files after resetting the temporary Git checkout.
+          # Copy the complete NopoMod source tree.
           cp -a /tmp/NopoMod/. .
 
           # 26.2 toolchain.
@@ -76,7 +66,6 @@ jobs:
             done
           fi
 
-          # This migration workflow is not part of the final source tree.
           rm -f .github/workflows/migrate-nopo.yml
 
           git config user.name "github-actions[bot]"
