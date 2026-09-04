@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "overflow-pet-levels",
+  "version": "${version}",
+  "name": "Overflow Pet Levels",
+  "description": "Shows overflow pet levels on pets",
+  "authors": ["nopo", "epic60869-hue"],
+  "contact": {
+    "sources": "https://github.com/epic60869-hue/overflow-pet-levels"
+  },
+  "license": "CC0-1.0",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      {
+        "value": "com.nopo.OverflowPetLevels",
+        "adapter": "kotlin"
+      }
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "~26.2",
+    "java": ">=25",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=1.13.13+kotlin.2.4.10"
+  }
+}
