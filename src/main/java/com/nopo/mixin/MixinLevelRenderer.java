@@ -9,6 +9,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.sheep.Sheep;
@@ -21,11 +23,13 @@ public class MixinLevelRenderer {
 
     @WrapOperation(method = "extractEntity", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRenderDispatcher;extractEntity(Lnet/minecraft/world/entity/Entity;F)Lnet/minecraft/client/renderer/entity/state/EntityRenderState;"))
     public EntityRenderState ravage(EntityRenderDispatcher instance, Entity entity, float f, Operation<EntityRenderState> original) {
-        // see: MixinSheep
         if (HypixelUtils.INSTANCE.getCurrentIsland() != IslandType.DUNGEON || !(entity instanceof Sheep sheep) || !(sheep instanceof FunnyEntityData data) || !data.nopo$isFunny()) {
             return original.call(instance, entity, f);
         }
-        Ravager ravager = new Ravager(EntityType.RAVAGER, Minecraft.getInstance().level);
+
+        @SuppressWarnings("unchecked")
+        EntityType<Ravager> ravagerType = (EntityType<Ravager>) (EntityType<?>) BuiltInRegistries.ENTITY_TYPE.getValue(Identifier.withDefaultNamespace("ravager"));
+        Ravager ravager = new Ravager(ravagerType, Minecraft.getInstance().level);
         ravager.xo = sheep.xo;
         ravager.yo = sheep.yo;
         ravager.zo = sheep.zo;
@@ -35,7 +39,6 @@ public class MixinLevelRenderer {
         ravager.yHeadRotO = sheep.yHeadRotO;
         ravager.setPos(sheep.position());
         ravager.copyPosition(sheep);
-        // beeg sheep
         return original.call(instance, ravager, f);
     }
 }
