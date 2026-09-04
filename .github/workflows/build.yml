@@ -1,8 +1,9 @@
-# Automatically build the project and run any configured tests for every push
-# and submitted pull request.
-
+# Automatically build the NopoMod 26.2 port.
 name: build
 on: [pull_request, push]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,6 +20,29 @@ jobs:
           distribution: 'microsoft'
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
+      - name: apply 26.2 source fixes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find src/main/kotlin -type f -name '*.kt' -print0 | while IFS= read -r -d '' f; do
+            sed -i \
+              -e 's/Minecraft\.getInstance()\.setScreen(/Minecraft.getInstance().gui.setScreen(/g' \
+              -e 's/Minecraft\.getInstance()\.screen/Minecraft.getInstance().gui.screen()/g' \
+              -e 's/Minecraft\.getInstance()\.options\.hideGui/Minecraft.getInstance().gui.hud.isHidden/g' \
+              -e 's/Items\.LIGHT_GRAY_STAINED_GLASS_PANE/Items.STAINED_GLASS_PANE.pick(net.minecraft.world.item.DyeColor.LIGHT_GRAY)/g' \
+              -e 's/Items\.LIME_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.LIME)/g' \
+              -e 's/Items\.PINK_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.PINK)/g' \
+              -e 's/Items\.GRAY_DYE/Items.DYE.pick(net.minecraft.world.item.DyeColor.GRAY)/g' \
+              "$f"
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main/kotlin
+          if ! git diff --cached --quiet; then
+            git commit -m "Fix remaining Minecraft 26.2 API changes"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
       - name: build
         run: ./gradlew build
       - name: capture build artifacts
