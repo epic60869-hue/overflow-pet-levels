@@ -20,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(EntityRenderDispatcher.class)
 public class MixinLevelRenderer {
 
+    // Minecraft 26.2 extracts entity render states through EntityRenderDispatcher.
     @Inject(method = "extractEntity", at = @At("HEAD"), cancellable = true)
     private <E extends Entity> void ravage(E entity, float f, CallbackInfoReturnable<EntityRenderState> cir) {
         if (HypixelUtils.INSTANCE.getCurrentIsland() != IslandType.DUNGEON
