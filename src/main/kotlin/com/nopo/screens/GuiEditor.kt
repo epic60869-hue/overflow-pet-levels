@@ -11,16 +11,13 @@ import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.network.chat.Component
 
 class GuiEditor(val pos: Position, val runnable: (GuiGraphicsExtractor) -> Unit) : Screen(Component.literal("Gui Editor")) {
-
     var previousScreen: Screen? = null
 
     init {
-        previousScreen = Minecraft.getInstance().screen as? ConfigScreen
+        previousScreen = Minecraft.getInstance().gui.screen() as? ConfigScreen
     }
 
-    override fun init() {
-        super.init()
-    }
+    override fun init() { super.init() }
 
     var firstX = pos.x
     var firstY = pos.y
@@ -35,12 +32,8 @@ class GuiEditor(val pos: Position, val runnable: (GuiGraphicsExtractor) -> Unit)
 
     override fun extractRenderState(context: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, f: Float) {
         super.extractRenderState(context, mouseX, mouseY, f)
-        for ((index, component) in tips.withIndex()) {
-            Utils.drawCenteredText(context, component, 0, 10 + index * 10)
-        }
-        pos.render(context) {
-            runnable(context)
-        }
+        for ((index, component) in tips.withIndex()) Utils.drawCenteredText(context, component, 0, 10 + index * 10)
+        pos.render(context) { runnable(context) }
     }
 
     override fun mouseMoved(x: Double, y: Double) {
@@ -60,15 +53,12 @@ class GuiEditor(val pos: Position, val runnable: (GuiGraphicsExtractor) -> Unit)
     }
 
     override fun charTyped(characterEvent: CharacterEvent): Boolean {
-        if (characterEvent.codepointAsString() == "r") {
-            pos.scale = 1f
-        }
+        if (characterEvent.codepointAsString() == "r") pos.scale = 1f
         return super.charTyped(characterEvent)
     }
 
     override fun mouseScrolled(d: Double, e: Double, scrollX: Double, scrollY: Double): Boolean {
-        if (scrollY > 0) pos.scale += 0.1f
-        else if (0 > scrollY) pos.scale -= 0.1f
+        if (scrollY > 0) pos.scale += 0.1f else if (scrollY < 0) pos.scale -= 0.1f
         pos.scale = pos.scale.coerceIn(0.2f, 10f)
         return super.mouseScrolled(d, e, scrollX, scrollY)
     }
@@ -79,6 +69,6 @@ class GuiEditor(val pos: Position, val runnable: (GuiGraphicsExtractor) -> Unit)
         pos.scale = firstScale
         ConfigManager.save()
         if (previousScreen == null) super.onClose()
-        else Minecraft.getInstance().setScreen(previousScreen)
+        else Minecraft.getInstance().gui.setScreen(previousScreen)
     }
 }
