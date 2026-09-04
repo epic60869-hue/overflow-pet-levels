@@ -24,11 +24,11 @@ jobs:
           set -euo pipefail
           git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
 
-          # Remove the old project files while keeping the checkout's Git metadata.
+          # Remove the old project files but keep the destination Git metadata.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 
-          # Copy the complete NopoMod source tree.
-          cp -a /tmp/NopoMod/. .
+          # Copy the complete NopoMod tree without copying its .git directory.
+          rsync -a --exclude='.git' /tmp/NopoMod/ ./
 
           # 26.2 toolchain.
           sed -i \
