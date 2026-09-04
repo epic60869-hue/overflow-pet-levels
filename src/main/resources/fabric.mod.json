@@ -1,28 +1,36 @@
 {
-  "schemaVersion": 1,
-  "id": "overflow-pet-levels",
-  "version": "${version}",
-  "name": "Overflow Pet Levels",
-  "description": "Shows overflow pet levels on pets",
-  "authors": ["nopo", "epic60869-hue"],
-  "contact": {
-    "sources": "https://github.com/epic60869-hue/overflow-pet-levels"
-  },
-  "license": "CC0-1.0",
-  "environment": "client",
-  "entrypoints": {
-    "client": [
-      {
-        "value": "com.nopo.OverflowPetLevels",
-        "adapter": "kotlin"
-      }
-    ]
-  },
-  "depends": {
-    "fabricloader": ">=0.19.3",
-    "minecraft": "~26.2",
-    "java": ">=25",
-    "fabric-api": "*",
-    "fabric-language-kotlin": ">=1.13.13+kotlin.2.4.10"
-  }
+	"schemaVersion": 1,
+	"id": "nopo",
+	"version": "${version}",
+	"name": "Nopo Mod",
+	"description": "Skyblock mod idk lol",
+	"authors": [
+		"nopo"
+	],
+	"contact": {
+		"sources": "https://github.com/NopoTheGamer/NopoMod"
+	},
+	"license": "LGPL-2.0",
+	"icon": "assets/nopo/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			{
+				"value": "com.nopo.NopoMod",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"mixins": [
+		"nopo.mixins.json"
+	],
+	"accessWidener": "nopo.accesswidener",
+	"depends": {
+		"fabricloader": ">=0.19.2",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*",
+		"hypixel-mod-api": ">=1.0.2"
+	}
 }

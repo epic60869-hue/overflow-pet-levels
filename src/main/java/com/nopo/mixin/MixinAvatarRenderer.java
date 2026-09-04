@@ -1,0 +1,113 @@
+package com.nopo.mixin;
+
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
+import com.mojang.authlib.GameProfile;
+import com.nopo.NopoMod;
+import com.nopo.features.silly.BabyDollModel;
+import com.nopo.features.silly.Cosmetics;
+import com.nopo.features.silly.Shoulder;
+import com.nopo.features.silly.SmallPlayers;
+import com.nopo.silly.layers.BabyCapeLayer;
+import com.nopo.silly.layers.ParrotOnBabyShoulderLayer;
+import com.nopo.silly.layers.PlayerOnShoulderLayer;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.ClientAvatarEntity;
+import net.minecraft.client.model.geom.ModelLayerLocation;
+import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.player.PlayerModel;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.renderer.entity.ArmorModelSet;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
+import net.minecraft.client.renderer.entity.layers.RenderLayer;
+import net.minecraft.client.renderer.entity.player.AvatarRenderer;
+import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.world.entity.Avatar;
+import net.minecraft.world.entity.animal.parrot.Parrot;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+@Mixin(AvatarRenderer.class)
+public class MixinAvatarRenderer<AvatarlikeEntity extends Avatar & ClientAvatarEntity> {
+
+    @WrapOperation(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;bakeLayer(Lnet/minecraft/client/model/geom/ModelLayerLocation;)Lnet/minecraft/client/model/geom/ModelPart;", ordinal = 0))
+    private static ModelPart makeBabyPlayerModel(EntityRendererProvider.Context instance, ModelLayerLocation modelLayerLocation, Operation<ModelPart> original, @Local(argsOnly = true) EntityRendererProvider.Context context, @Local(argsOnly = true) boolean slimSteve) {
+        SmallPlayers.setPLAYER_MODEL(new PlayerModel(context.bakeLayer(Objects.requireNonNull(SmallPlayers.getPLAYER_BABY())), false));
+        SmallPlayers.setPLAYER_MODEL_SLIM(new PlayerModel(context.bakeLayer(Objects.requireNonNull(SmallPlayers.getPLAYER_BABY_SLIM())), true));
+        return original.call(instance, modelLayerLocation);
+    }
+
+    @WrapOperation(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/entity/player/AvatarRenderer;addLayer(Lnet/minecraft/client/renderer/entity/layers/RenderLayer;)Z", ordinal = 0))
+    private static boolean addExtraRenderLayers(AvatarRenderer instance, RenderLayer renderLayer, Operation<Boolean> original, @Local(argsOnly = true) EntityRendererProvider.Context context, @Local(argsOnly = true) boolean bl) {
+        HumanoidArmorLayer humanoidArmorLayer = new HumanoidArmorLayer<>(
+                instance,
+                ArmorModelSet.bake(bl ? ModelLayers.PLAYER_SLIM_ARMOR : ModelLayers.PLAYER_ARMOR, context.getModelSet(), modelPart -> new PlayerModel(modelPart, bl)),
+                ArmorModelSet.bake(Objects.requireNonNull(bl ? SmallPlayers.getPLAYER_BABY_SLIM_ARMOR() : SmallPlayers.getPLAYER_BABY_ARMOR()), context.getModelSet(), modelPart -> new PlayerModel(modelPart, bl)),
+                context.getEquipmentRenderer()
+        );
+        original.call(instance, new BabyCapeLayer(instance, context.getModelSet(), context.getEquipmentAssets()));
+        original.call(instance, new PlayerOnShoulderLayer(instance, context.getModelSet(), context.getEquipmentAssets()));
+        original.call(instance, new ParrotOnBabyShoulderLayer(instance, context.getModelSet()));
+        return original.call(instance, humanoidArmorLayer);
+    }
+
+    @Inject(method = "extractRenderState(Lnet/minecraft/world/entity/Avatar;Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;F)V", at = @At("TAIL"))
+    public void extract(AvatarlikeEntity avatar, AvatarRenderState avatarRenderState, float f, CallbackInfo ci) {
+        if (Minecraft.getInstance().player == null) return;
+        if (avatarRenderState.isInvisibleToPlayer) return;
+        if (avatar instanceof AbstractClientPlayer entity) {
+            GameProfile profile = entity.getGameProfile();
+            UUID uuid = profile.id();
+            Parrot.Variant leftParrot = Cosmetics.getLeftParrot(uuid);
+            Parrot.Variant rightParrot = Cosmetics.getRightParrot(uuid);
+            boolean babyDoll = Cosmetics.getBabyDoll(uuid);
+            boolean small = Cosmetics.getSmall(uuid);
+            if (leftParrot != null) avatarRenderState.parrotOnLeftShoulder = leftParrot;
+            if (rightParrot != null) avatarRenderState.parrotOnRightShoulder = rightParrot;
+            if (babyDoll) avatarRenderState.setData(BabyDollModel.getKey(), true);
+            if (small) {
+                avatarRenderState.isBaby = true;
+                avatarRenderState.ageScale = 0.5f;
+                avatarRenderState.setData(SmallPlayers.getKey(), true);
+            }
+            if (uuid == Minecraft.getInstance().player.getUUID()) {
+                if (NopoMod.config.getSmallConfig().getEnabled()) {
+                    avatarRenderState.isBaby = true;
+                    avatarRenderState.ageScale = 0.5f;
+                    avatarRenderState.setData(SmallPlayers.getKey(), true);
+                }
+                if (NopoMod.config.getBabyDollConfig().getEnabled()) {
+                    avatarRenderState.setData(BabyDollModel.getKey(), true);
+                }
+                Map<@NotNull Shoulder, Parrot.@Nullable Variant> parrotMap = NopoMod.config.getParrotConfig().getParrots();
+                if (parrotMap == null) return;
+                if (parrotMap.get(Shoulder.LEFT) != null) {
+                    avatarRenderState.parrotOnLeftShoulder = parrotMap.get(Shoulder.LEFT);
+                }
+                if (parrotMap.get(Shoulder.RIGHT) != null) {
+                    avatarRenderState.parrotOnRightShoulder = parrotMap.get(Shoulder.RIGHT);
+                }
+            } else {
+                if (NopoMod.config.getSmallConfig().getEveryone()) {
+                    avatarRenderState.isBaby = true;
+                    avatarRenderState.ageScale = 0.5f;
+                    avatarRenderState.setData(SmallPlayers.getKey(), true);
+                }
+                if (NopoMod.config.getBabyDollConfig().getEveryone()) {
+                    avatarRenderState.setData(BabyDollModel.getKey(), true);
+                }
+            }
+        }
+    }
+}
