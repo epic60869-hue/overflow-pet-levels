@@ -16,6 +16,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Items
 
 object RaffleQuests : FeatureModule("raffleQuestDisplay", NopoMod.config.raffleQuestConfig,
@@ -30,18 +31,14 @@ object RaffleQuests : FeatureModule("raffleQuestDisplay", NopoMod.config.raffleQ
 
     const val RAFFLE_TASKS = "Raffle Tasks"
     val questSlots = 10..34
-
-    // RAFFLE TASK! You completed the Ender Slayer raffle task and earned +1 Raffle Ticket and a slice of cake!
     val messageRegex = Regex("RAFFLE TASK! You completed the (?<task>[\\w ]+) raffle task and earned \\+1 Raffle Ticket and a slice of cake!")
-
     const val RESET_MESSAGE = "Your Raffle Tasks have refreshed! Click HERE to view your new ones!"
-
     val tasks = mutableMapOf<String, Component>()
 
     override fun onTick(totalTicks: Int) {
         if (!config.enabled) return
         if (!HypixelUtils.onSkyblock()) return
-        val screen = Minecraft.getInstance().screen
+        val screen = Minecraft.getInstance().gui.screen()
         if (screen !is ContainerScreen) return
         val slots = Minecraft.getInstance().player?.containerMenu?.slots ?: return
         val containerTitle = screen.title.string
@@ -49,7 +46,7 @@ object RaffleQuests : FeatureModule("raffleQuestDisplay", NopoMod.config.raffleQ
             tasks.clear()
             for (index in questSlots) {
                 val stack = slots[index].item
-                if (stack.item == Items.LIGHT_GRAY_STAINED_GLASS_PANE) continue
+                if (stack.item == Items.STAINED_GLASS_PANE.pick(DyeColor.LIGHT_GRAY)) continue
                 val lore = stack.get(DataComponents.LORE)?.lines ?: continue
                 val currentQuest = Component.empty()
                 for ((index, line) in lore.withIndex()) {
@@ -73,9 +70,7 @@ object RaffleQuests : FeatureModule("raffleQuestDisplay", NopoMod.config.raffleQ
         if (!config.enabled) return
         if (!HypixelUtils.onSkyblock()) return
         if (tasks.isEmpty()) return
-        getConfig().pos.render(context) {
-            doRender(context)
-        }
+        getConfig().pos.render(context) { doRender(context) }
     }
 
     override fun doRender(context: GuiGraphicsExtractor) {
@@ -103,5 +98,4 @@ object RaffleQuests : FeatureModule("raffleQuestDisplay", NopoMod.config.raffleQ
             if (tasks.contains(task)) tasks.remove(task)
         }
     }
-
 }
