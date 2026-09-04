@@ -19,21 +19,23 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Replace with NopoMod source
+      - name: Download NopoMod
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
+
+      - name: Copy NopoMod source
+        shell: bash
         run: |
           set -euxo pipefail
-          git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
-
-          # Delete the old project files while keeping the destination .git directory.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-
-          # Copy the entire NopoMod source tree without copying its Git metadata.
           rsync -a --exclude='.git' /tmp/NopoMod/ ./
+          test -f build.gradle.kts
+          test -f src/main/resources/fabric.mod.json
 
-          # Port the upstream project to Minecraft 26.2 / Java 25.
+      - name: Port build configuration to 26.2
+        shell: bash
+        run: |
+          set -euxo pipefail
           sed -i \
             -e 's/^minecraft_version=.*/minecraft_version=26.2/' \
             -e 's/^loader_version=.*/loader_version=0.19.3/' \
@@ -52,19 +54,23 @@ jobs:
           sed -i 's/minecraft": "~26\.1"/minecraft": "~26.2"/' src/main/resources/fabric.mod.json
           sed -i 's/"java": ">=21"/"java": ">=25"/' src/main/resources/fabric.mod.json
 
-          # Update copied CI workflows to Java 25 where applicable.
-          if [ -d .github/workflows ]; then
-            find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | while IFS= read -r -d '' f; do
-              sed -i -e "s/java-version: ['\"]21['\"]/java-version: '25'/g" "$f"
-            done
-          fi
-
-          # Remove temporary migration workflows from the final source tree.
+      - name: Prepare final tree
+        shell: bash
+        run: |
+          set -euxo pipefail
           rm -f .github/workflows/migrate-nopo.yml
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status --short
-          git commit -m "Replace project with NopoMod port for Minecraft 26.2"
-          git push origin HEAD:nopomod-26.2-replace
+          git diff --cached --stat
+
+      - name: Commit replacement
+        shell: bash
+        run: git commit -m "Replace project with NopoMod port for Minecraft 26.2"
+
+      - name: Push replacement
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:nopomod-26.2-replace
