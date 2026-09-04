@@ -12,19 +12,16 @@ import com.nopo.utils.Utils
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.gui.screens.inventory.ContainerScreen
+import net.minecraft.world.item.DyeColor
 import net.minecraft.world.item.Items
 
 object WardrobeKeybinds : BaseModule("wardrobeKeybinds"), TickEvent, CommandRegistration {
 
     val keybindData get() = NopoMod.wardrobeDataConfig
-
     var cooldown = -1
-
     const val FIRST_SLOT = 36
 
-    override fun onTick(totalTicks: Int) {
-        cooldown--
-    }
+    override fun onTick(totalTicks: Int) { cooldown-- }
 
     val loadoutRegex = Regex("\\(\\d+/\\d+\\) Loadouts")
     val equipmentRegex = Regex("\\(\\d+/\\d+\\) Equipment Sets")
@@ -52,44 +49,29 @@ object WardrobeKeybinds : BaseModule("wardrobeKeybinds"), TickEvent, CommandRegi
             if (foundValidKeybindSet) break
             if (bind.map != null && HypixelUtils.map !in bind.map) continue
             if (bind.mode != null && HypixelUtils.mode !in bind.mode) continue
-
             foundValidKeybindSet = true
             for ((index, key) in bind.getKeys().withIndex()) {
                 val key = key ?: continue
-                if (!InputConstants.isKeyDown(Minecraft.getInstance().window, key)) {
-                    continue
-                }
+                if (!InputConstants.isKeyDown(Minecraft.getInstance().window, key)) continue
                 val slotId = index + FIRST_SLOT
                 val stack = slots[slotId]
                 val selectorButton = stack.item.item
-                if (selectorButton == Items.PINK_DYE || selectorButton == Items.GRAY_DYE) {
+                if (selectorButton == Items.DYE.pick(DyeColor.PINK) || selectorButton == Items.DYE.pick(DyeColor.GRAY)) {
                     changeSlot(slotId)
                     return true
                 }
-
-                if (selectorButton == Items.LIME_DYE && bind.allowUnequip != false) {
+                if (selectorButton == Items.DYE.pick(DyeColor.LIME) && bind.allowUnequip != false) {
                     changeSlot(slotId)
                     return true
                 }
             }
-
-            if (bind.keyPrevPage != null) {
-                if (InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyPrevPage)) {
-                    val prevPage = 45
-                    if (slots[prevPage].item.item == Items.ARROW) {
-                        changeSlot(prevPage)
-                        return true
-                    }
-                }
+            if (bind.keyPrevPage != null && InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyPrevPage)) {
+                val prevPage = 45
+                if (slots[prevPage].item.item == Items.ARROW) { changeSlot(prevPage); return true }
             }
-            if (bind.keyNextPage != null) {
-                if (InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyNextPage)) {
-                    val nextPage = 53
-                    if (slots[nextPage].item.item == Items.ARROW) {
-                        changeSlot(nextPage)
-                        return true
-                    }
-                }
+            if (bind.keyNextPage != null && InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyNextPage)) {
+                val nextPage = 53
+                if (slots[nextPage].item.item == Items.ARROW) { changeSlot(nextPage); return true }
             }
         }
         return false
@@ -104,47 +86,30 @@ object WardrobeKeybinds : BaseModule("wardrobeKeybinds"), TickEvent, CommandRegi
             if (foundValidKeybindSet) break
             if (bind.map != null && HypixelUtils.map !in bind.map) continue
             if (bind.mode != null && HypixelUtils.mode !in bind.mode) continue
-
             foundValidKeybindSet = true
             for ((index, key) in bind.getLoadoutKeys().withIndex()) {
                 val key = key ?: continue
-                if (!InputConstants.isKeyDown(Minecraft.getInstance().window, key)) {
-                    continue
-                }
+                if (!InputConstants.isKeyDown(Minecraft.getInstance().window, key)) continue
                 val slotId = (index / 3 * 9) + (index % 3) + 14
                 val stack = slots[slotId]
-                if (stack.item.item != Items.GRAY_DYE) {
+                if (stack.item.item != Items.DYE.pick(DyeColor.GRAY)) {
                     changeSlot(slotId)
                     return true
                 }
             }
-
-            if (bind.keyPrevPage != null) {
-                if (InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyPrevPage)) {
-                    val prevPage = 17
-                    if (slots[prevPage].item.item == Items.ARROW) {
-                        changeSlot(prevPage)
-                        return true
-                    }
-                }
+            if (bind.keyPrevPage != null && InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyPrevPage)) {
+                val prevPage = 17
+                if (slots[prevPage].item.item == Items.ARROW) { changeSlot(prevPage); return true }
             }
-            if (bind.keyNextPage != null) {
-                if (InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyNextPage)) {
-                    val nextPage = 44
-                    if (slots[nextPage].item.item == Items.ARROW) {
-                        changeSlot(nextPage)
-                        return true
-                    }
-                }
+            if (bind.keyNextPage != null && InputConstants.isKeyDown(Minecraft.getInstance().window, bind.keyNextPage)) {
+                val nextPage = 44
+                if (slots[nextPage].item.item == Items.ARROW) { changeSlot(nextPage); return true }
             }
         }
         return false
     }
 
-    private fun changeSlot(slot: Int) {
-        Utils.clickSlot(slot, 0)
-        cooldown = 10
-    }
+    private fun changeSlot(slot: Int) { Utils.clickSlot(slot, 0); cooldown = 10 }
 
     override fun createCommand(): Commodore? {
         if (!Utils.isDevAllowed()) return null
