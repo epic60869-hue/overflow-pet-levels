@@ -24,14 +24,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          curl -fsSL https://github.com/NopoTheGamer/NopoMod/archive/refs/heads/master.tar.gz -o /tmp/nopo.tar.gz
-          mkdir -p /tmp/nopo
-          tar -xzf /tmp/nopo.tar.gz -C /tmp/nopo --strip-components=1
+          set -euxo pipefail
+          git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
 
-          # Delete the old overflow-pet-levels project, keeping Git metadata.
+          # Delete the old project files while keeping the destination .git directory.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a /tmp/nopo/. .
+
+          # Copy the entire NopoMod source tree without copying its Git metadata.
+          rsync -a --exclude='.git' /tmp/NopoMod/ ./
 
           # Port the upstream project to Minecraft 26.2 / Java 25.
           sed -i \
@@ -52,13 +52,14 @@ jobs:
           sed -i 's/minecraft": "~26\.1"/minecraft": "~26.2"/' src/main/resources/fabric.mod.json
           sed -i 's/"java": ">=21"/"java": ">=25"/' src/main/resources/fabric.mod.json
 
+          # Update copied CI workflows to Java 25 where applicable.
           if [ -d .github/workflows ]; then
             find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | while IFS= read -r -d '' f; do
               sed -i -e "s/java-version: ['\"]21['\"]/java-version: '25'/g" "$f"
             done
           fi
 
-          # The temporary migration workflow is not part of the final repository.
+          # Remove temporary migration workflows from the final source tree.
           rm -f .github/workflows/migrate-nopo.yml
 
           git config user.name "github-actions[bot]"
