@@ -2,37 +2,68 @@ name: Build
 
 on:
   push:
-  pull_request:
+    branches:
+      - nopomod-26.2-replace
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  migrate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
     steps:
-      - name: Checkout
+      - name: Checkout destination
         uses: actions/checkout@v4
-
-      - name: Set up Java 25
-        uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: '25'
-          cache: gradle
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.5.1'
+      - name: Replace with NopoMod source
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -fsSL https://github.com/NopoTheGamer/NopoMod/archive/refs/heads/master.tar.gz -o /tmp/nopo.tar.gz
+          mkdir -p /tmp/nopo
+          tar -xzf /tmp/nopo.tar.gz -C /tmp/nopo --strip-components=1
 
-      - name: Build
-        run: gradle build --no-daemon
+          # Delete the old overflow-pet-levels project, keeping Git metadata.
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/nopo/. .
 
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: overflow-pet-levels-26.2
-          path: build/libs/*.jar
-          if-no-files-found: error
+          # Port the upstream project to Minecraft 26.2 / Java 25.
+          sed -i \
+            -e 's/^minecraft_version=.*/minecraft_version=26.2/' \
+            -e 's/^loader_version=.*/loader_version=0.19.3/' \
+            -e 's/^loom_version=.*/loom_version=1.17-SNAPSHOT/' \
+            -e 's/^fabric_kotlin_version=.*/fabric_kotlin_version=1.13.13+kotlin.2.4.10/' \
+            -e 's/^fabric_api_version=.*/fabric_api_version=0.159.0+26.2/' \
+            gradle.properties
+
+          sed -i \
+            -e 's/version "2\.3\.21"/version "2.4.10"/' \
+            -e 's/options\.release = 21/options.release = 25/' \
+            -e 's/JvmTarget\.JVM_21/JvmTarget.JVM_25/' \
+            -e 's/JavaVersion\.VERSION_21/JavaVersion.VERSION_25/g' \
+            build.gradle.kts
+
+          sed -i 's/minecraft": "~26\.1"/minecraft": "~26.2"/' src/main/resources/fabric.mod.json
+          sed -i 's/"java": ">=21"/"java": ">=25"/' src/main/resources/fabric.mod.json
+
+          if [ -d .github/workflows ]; then
+            find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | while IFS= read -r -d '' f; do
+              sed -i -e "s/java-version: ['\"]21['\"]/java-version: '25'/g" "$f"
+            done
+          fi
+
+          # The temporary migration workflow is not part of the final repository.
+          rm -f .github/workflows/migrate-nopo.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "Replace project with NopoMod port for Minecraft 26.2"
+          git push origin HEAD:nopomod-26.2-replace
