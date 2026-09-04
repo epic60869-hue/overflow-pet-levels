@@ -29,7 +29,6 @@ object ExperimentationRngDisplay : FeatureModule("experimentationRngDisplay", No
 
     fun getConfig() = config as PositionConfig
 
-    //                          379,493/500k
     val rngRegex = Regex("\\s+(?<amount>[\\d,]+)/(?<needed>.*)")
 
     var rngXp: Component? = null
@@ -37,7 +36,7 @@ object ExperimentationRngDisplay : FeatureModule("experimentationRngDisplay", No
     override fun onTick(totalTicks: Int) {
         rngXp = null
         if (!config.enabled) return
-        val screen: Screen? = Minecraft.getInstance().screen
+        val screen: Screen? = Minecraft.getInstance().gui.screen()
         if (screen !is ContainerScreen) return
         val title = screen.getTitle().string
         if (!title.startsWith("Experimentation Table")) return
