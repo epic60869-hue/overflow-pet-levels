@@ -3,12 +3,13 @@ package com.nopo
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
+import com.mojang.blaze3d.platform.InputConstants
 import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback
-import net.fabricmc.fabric.api.client.rendering.v1.HudElementRegistry
-import net.fabricmc.fabric.api.client.rendering.v1.VanillaHudElements
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.minecraft.ChatFormatting
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
@@ -39,7 +40,17 @@ object OverflowPetLevels : ClientModInitializer {
 
     private val petNameRegex = Regex(" +\\[Lvl (?<level>\\d+)] (?<name>.*)")
     private val overflowXpRegex = Regex(" +\\+(?<xp>[\\d,.]+) XP")
-    private val openEditorKey = KeyMapping("key.overflow-pet-levels.editor", GLFW.GLFW_KEY_P, "category.overflow-pet-levels")
+    private val keyCategory = KeyMapping.Category.register(
+        Identifier.fromNamespaceAndPath("overflow-pet-levels", "main")
+    )
+    private val openEditorKey = KeyMappingHelper.registerKeyMapping(
+        KeyMapping(
+            "key.overflow-pet-levels.editor",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_P,
+            keyCategory
+        )
+    )
 
     private var currentPet = ""
     private var currentOverflowLevel = -1
@@ -48,11 +59,11 @@ object OverflowPetLevels : ClientModInitializer {
         configPath = Minecraft.getInstance().gameDirectory.toPath().resolve("config/overflow-pet-levels.json")
         loadConfig()
 
-        KeyBindingHelper.registerKeyBinding(openEditorKey)
-
         ClientTickEvents.END_CLIENT_TICK.register { client ->
-            if (openEditorKey.consumeClick() && client.screen == null) {
-                client.gui.setScreen(PetHudEditor())
+            while (openEditorKey.consumeClick()) {
+                if (client.player != null && client.screen == null) {
+                    client.setScreen(PetHudEditor())
+                }
             }
             updatePetFromTab(client)
         }
@@ -70,19 +81,18 @@ object OverflowPetLevels : ClientModInitializer {
     }
 
     private fun updatePetFromTab(client: Minecraft) {
-        if (client.connection == null) {
+        val connection = client.connection ?: run {
             display = null
             return
         }
 
-        val tab = client.connection!!.onlinePlayers
-            .mapNotNull { it.tabListDisplayName }
-
+        val tab = connection.onlinePlayers.mapNotNull { it.tabListDisplayName }
         val petLines = mutableListOf<Component>()
         var readingPet = false
+
         for (line in tab) {
             val text = line.string
-            if (text == "Pet:") {
+            if (text.trim() == "Pet:") {
                 readingPet = true
                 petLines.add(line)
                 continue
@@ -95,6 +105,8 @@ object OverflowPetLevels : ClientModInitializer {
 
         if (petLines.size < 2) {
             display = null
+            currentPet = ""
+            currentOverflowLevel = -1
             return
         }
 
@@ -113,6 +125,7 @@ object OverflowPetLevels : ClientModInitializer {
                 overflowLevel = realLevel
                 name = nameMatch.groups["name"]!!.value
                 rarity = rarityFromComponent(line)
+                result.add(line)
                 continue
             }
 
@@ -124,11 +137,14 @@ object OverflowPetLevels : ClientModInitializer {
                 if (realLevel == 200) overflowLevel--
 
                 val progress = calcLeftOverXp(xp, rarity)
-                val nextXp = getXpForLevel(overflowLevel - if (rarity != PetRarity.LEGENDARY && overflowLevel < 100) 1 else 0, rarity)
+                val nextLevel = if (rarity != PetRarity.LEGENDARY && overflowLevel < 100) overflowLevel else overflowLevel
+                val nextXp = getXpForLevel(nextLevel.coerceAtLeast(0), rarity)
                 val percent = if (nextXp > 0) progress / nextXp * 100f else 100f
 
-                result.add(Component.literal(" ${formatNumber(progress)}/$nextXp XP (${formatOneDecimal(percent)}%)")
-                    .withStyle(ChatFormatting.YELLOW))
+                result.add(
+                    Component.literal(" ${formatNumber(progress)}/$nextXp XP (${formatOneDecimal(percent)}%)")
+                        .withStyle(ChatFormatting.YELLOW)
+                )
                 continue
             }
 
@@ -137,18 +153,20 @@ object OverflowPetLevels : ClientModInitializer {
 
         if (realLevel >= 0 && name.isNotEmpty()) {
             val petNameComponent = petLines.firstOrNull { it.string.contains(name) } ?: Component.literal(name)
-            result.add(1.coerceAtMost(result.size), generateCustomName(overflowLevel, realLevel, petNameComponent, name, rarity))
+            if (result.size >= 2) {
+                result[1] = generateCustomName(overflowLevel, realLevel, petNameComponent, rarity)
+            }
         }
 
         display = result
 
         if (foundOverflowXp && name == currentPet && currentOverflowLevel + 1 == overflowLevel && overflowLevel > 0) {
-            client.player?.displayClientMessage(
+            client.player?.sendSystemMessage(
                 Component.literal("Your ").withStyle(ChatFormatting.GREEN)
                     .append(Component.literal(name))
                     .append(Component.literal(" leveled up to level ").withStyle(ChatFormatting.GREEN))
                     .append(Component.literal(overflowLevel.toString()).withStyle(ChatFormatting.BLUE))
-                    .append(Component.literal("!")), false
+                    .append(Component.literal("!"))
             )
         }
 
@@ -168,18 +186,20 @@ object OverflowPetLevels : ClientModInitializer {
     }
 
     private fun renderHud(context: GuiGraphicsExtractor) {
-        if (!enabled || Minecraft.getInstance().options.hideGui || !isSkyblock()) return
+        val client = Minecraft.getInstance()
+        if (!enabled || client.options.hideGui || !isSkyblock()) return
         val lines = display ?: return
 
-        context.pose().pushMatrix()
-        context.pose().translate(hudX.toFloat(), hudY.toFloat())
-        context.pose().scale(hudScale)
+        val matrices = context.pose()
+        matrices.pushMatrix()
+        matrices.translate(hudX.toFloat(), hudY.toFloat())
+        matrices.scale(hudScale, hudScale)
 
-        val font = Minecraft.getInstance().font
+        val font = client.font
         for ((index, line) in lines.withIndex()) {
-            context.text(font, line, 0, index * 10, -1)
+            context.text(font, line, 0f, index * 10f, 0xFFFFFFFF.toInt())
         }
-        context.pose().popMatrix()
+        matrices.popMatrix()
     }
 
     private fun addOverflowTooltip(itemStack: ItemStack, lore: MutableList<Component>) {
@@ -195,16 +215,15 @@ object OverflowPetLevels : ClientModInitializer {
             if (text.string.contains("MAX LEVEL")) {
                 lore[index] = Component.literal("MAX LEVEL").withStyle(ChatFormatting.AQUA, ChatFormatting.BOLD)
                     .append(Component.literal(" [").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal("${calcLevel(xp)}✦").withStyle(ChatFormatting.GOLD))
+                    .append(Component.literal("${calcLevel(xp, PetRarity.LEGENDARY)}✦").withStyle(ChatFormatting.GOLD))
                     .append(Component.literal("]").withStyle(ChatFormatting.GRAY))
                 return
             }
         }
     }
 
-    private fun generateCustomName(overflowLevel: Int, realLevel: Int, nameComponent: Component, name: String, rarity: PetRarity): Component {
-        val builder = Component.literal(" [Lvl $overflowLevel")
-            .withStyle(ChatFormatting.GRAY)
+    private fun generateCustomName(overflowLevel: Int, realLevel: Int, nameComponent: Component, rarity: PetRarity): Component {
+        val builder = Component.literal(" [Lvl $overflowLevel").withStyle(ChatFormatting.GRAY)
         if (rarity != PetRarity.LEGENDARY && realLevel != overflowLevel && overflowLevel < 100) {
             builder.append(Component.literal(" ($realLevel)").withStyle(ChatFormatting.GRAY))
         }
@@ -230,6 +249,7 @@ object OverflowPetLevels : ClientModInitializer {
         while (remaining > 0) {
             remaining -= getXpForLevel(level, rarity)
             level++
+            if (level > 300) break
         }
         return level.coerceAtLeast(1)
     }
@@ -242,14 +262,13 @@ object OverflowPetLevels : ClientModInitializer {
             if (remaining > required) remaining -= required
             else return remaining
             level++
+            if (level > 300) break
         }
         return 0f
     }
 
     private fun isSkyblock(): Boolean {
-        val player = Minecraft.getInstance().player ?: return false
-        val scoreboard = player.scoreboard
-        return scoreboard.displayObjectives.any { it.displayName.string.contains("SKYBLOCK", ignoreCase = true) }
+        return Minecraft.getInstance().player != null && display != null
     }
 
     private fun formatNumber(value: Float): String = String.format("%,.1f", value)
@@ -299,17 +318,17 @@ object OverflowPetLevels : ClientModInitializer {
         override fun extractRenderState(context: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
             super.extractRenderState(context, mouseX, mouseY, partialTick)
             val font = Minecraft.getInstance().font
-            context.text(font, Component.literal("Overflow Pet Levels HUD Editor"), 8, 8, -1)
-            context.text(font, Component.literal("Move mouse = move HUD | Scroll = scale | R = reset | Left click = save"), 8, 20, -1)
+            context.text(font, Component.literal("Overflow Pet Levels HUD Editor"), 8f, 8f, 0xFFFFFFFF.toInt())
+            context.text(font, Component.literal("Move mouse = move HUD | Scroll = scale | R = reset | Left click = save"), 8f, 20f, 0xFFFFFFFF.toInt())
             context.pose().pushMatrix()
             context.pose().translate(hudX.toFloat(), hudY.toFloat())
-            context.pose().scale(hudScale)
+            context.pose().scale(hudScale, hudScale)
             val sample = display ?: listOf(
                 Component.literal("Pet:").withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD),
                 Component.literal(" [Lvl 231] ").withStyle(ChatFormatting.GRAY).append(Component.literal("Golden Dragon").withStyle(ChatFormatting.GOLD)),
                 Component.literal(" 1,832,110.4/1.9M XP (97.1%)").withStyle(ChatFormatting.YELLOW)
             )
-            for ((index, line) in sample.withIndex()) context.text(font, line, 0, index * 10, -1)
+            for ((index, line) in sample.withIndex()) context.text(font, line, 0f, index * 10f, 0xFFFFFFFF.toInt())
             context.pose().popMatrix()
         }
 
