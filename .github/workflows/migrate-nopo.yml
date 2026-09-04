@@ -24,19 +24,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-
           git clone --depth 1 https://github.com/NopoTheGamer/NopoMod.git /tmp/NopoMod
 
-          # Remove the old overflow-pet-levels project while keeping this checkout's .git.
+          # Remove every old project file but keep this checkout's Git metadata.
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 
-          # Copy the complete NopoMod source tree.
+          # Copy the complete NopoMod repository.
           cp -a /tmp/NopoMod/. .
           rm -rf .git
           git init
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch origin nopomod-26.2-replace
-          git checkout -B nopomod-26.2-replace FETCH_HEAD
+          git reset --hard FETCH_HEAD
+
+          # Re-apply the copied source files after resetting the temporary Git checkout.
+          cp -a /tmp/NopoMod/. .
 
           # 26.2 toolchain.
           sed -i \
@@ -64,7 +66,7 @@ jobs:
           sed -i 's/minecraft": "~26\.1"/minecraft": "~26.2"/' src/main/resources/fabric.mod.json
           sed -i 's/"java": ">=21"/"java": ">=25"/' src/main/resources/fabric.mod.json
 
-          # Update any copied upstream CI workflow to use Java 25 / Gradle 9.5.1.
+          # Update copied upstream CI workflows to use Java 25 / Gradle 9.5.1.
           if [ -d .github/workflows ]; then
             find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0 | while IFS= read -r -d '' f; do
               sed -i \
@@ -74,7 +76,7 @@ jobs:
             done
           fi
 
-          # This migration workflow has done its job; it is not part of the final source tree.
+          # This migration workflow is not part of the final source tree.
           rm -f .github/workflows/migrate-nopo.yml
 
           git config user.name "github-actions[bot]"
