@@ -50,18 +50,14 @@ object FarmingRngOverlay : FeatureModule(
         var animationStart: Long,
     )
 
-    // New drops are inserted at the top. The list therefore reads newest -> oldest.
-    // The same item is merged into its existing row instead of creating another row.
     private val activeDrops = CopyOnWriteArrayList<Drop>()
     private val prices = ConcurrentHashMap<String, Long>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
     private val farmingDrops = setOf(
-        // Harvest Feast / Rare Crops
         "Cornucopia", "Carrot Zest", "Deepfries", "Aggourdian", "Cane Knot", "Melon Juice",
         "Cactus Flower", "Designer Coffee Beans", "Feastfungus", "Botroot", "Salted Sunflower Seeds",
         "Crystalized Moonlight", "Floral Gelatin",
-        // Farming RNG drops
         "Cropie", "Helianthus", "Seasoning", "Squash", "Fermento", "Burrowing Spores", "Overgrown Grass", "Green Bandana",
         "Dedication IV", "Dedication 4", "Flowering Bouquet", "Rooted Spores", "Fruit Bowl",
         "Atmospheric Filter", "Beady Eyes", "Clipped Wings", "Mantid Claw", "Wriggling Larva",
@@ -74,7 +70,7 @@ object FarmingRngOverlay : FeatureModule(
     )
 
     private val rngMessageRegex = Regex(
-        "(?i)^(?:.*?\u00a7.)?(?:RARE CROP!|(?:VERY |CRAZY |PRAY TO RNGESUS |RNGESUS INCARNATE )?RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?)[ ]*(?<item>.+?)\\s*(?:\\(\\+[^)]*\\))?[! ]*$"
+        "(?i)^(?:.*?\\u00a7.)?(?:RARE CROP!|(?:VERY |CRAZY |PRAY TO RNGESUS |RNGESUS INCARNATE )?RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?)[ ]*(?<item>.+?)\\s*(?:\\(\\+[^)]*\\))?[! ]*$"
     )
     private val olderDropRegex = Regex(
         "(?i)(?:you (?:found|dropped|got)|you received|drop(?:ped)?[: ])\\s*(?:an? |some )?(?<item>.+?)(?:!|$)"
@@ -115,7 +111,6 @@ object FarmingRngOverlay : FeatureModule(
             }
         }
 
-        // Seasoning has no price, so never try to resolve it remotely.
         if (cachedValue == null && key != "seasoning") requestPrice(parsed.second)
     }
 
@@ -276,29 +271,29 @@ object FarmingRngOverlay : FeatureModule(
             context.pose().pushMatrix()
             context.pose().translate(0f, (y + yOffset).toFloat())
 
+            // Use the same bold, compact Minecraft pixel-font feel as the reference UI.
+            // The three passes give it a crisp dark outline and a small raised/depth effect.
             val text = componentBuilder {
                 appendWithColor("x${drop.amount} ${drop.name}", drop.color)
                 if (valueText != null) {
                     append("  ")
                     appendWithColor(valueText, ChatFormatting.GOLD)
                 }
-            }
+            }.withStyle(ChatFormatting.BOLD)
 
-            // Give the overlay a small raised/outlined look instead of flat text.
-            // Two dark offset passes create a readable depth/shadow without a box around it.
             context.text(
                 Minecraft.getInstance().font,
                 text,
                 2,
                 2,
-                0x90000000.toInt()
+                0xB0000000.toInt()
             )
             context.text(
                 Minecraft.getInstance().font,
                 text,
                 1,
                 1,
-                0xFF000000.toInt()
+                0xFF111111.toInt()
             )
             context.text(
                 Minecraft.getInstance().font,
@@ -309,7 +304,6 @@ object FarmingRngOverlay : FeatureModule(
             )
 
             context.pose().popMatrix()
-
             y += Minecraft.getInstance().font.lineHeight + ROW_GAP
         }
     }
