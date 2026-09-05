@@ -103,7 +103,7 @@ object FarmingRngOverlay : FeatureModule(
                     Drop(
                         amount = parsed.first,
                         name = parsed.second,
-                        color = rarityColor(message),
+                        color = ChatFormatting.GREEN,
                         value = cachedValue,
                         shownUntil = now + DROP_DURATION_MS,
                         animationStart = now,
@@ -112,7 +112,7 @@ object FarmingRngOverlay : FeatureModule(
             }
         }
 
-        if (cachedValue == null && key != "seasoning") requestPrice(parsed.second)
+        if (cachedValue == null) requestPrice(parsed.second)
     }
 
     private fun parseDrop(raw: String): Pair<Int, String>? {
@@ -147,20 +147,9 @@ object FarmingRngOverlay : FeatureModule(
         return amount to known
     }
 
-    private fun rarityColor(message: Component): ChatFormatting {
-        val text = message.toString()
-        return when {
-            text.contains("RARE CROP", ignoreCase = true) -> ChatFormatting.BLUE
-            text.contains("CRAZY RARE", ignoreCase = true) -> ChatFormatting.LIGHT_PURPLE
-            text.contains("RNGESUS", ignoreCase = true) -> ChatFormatting.DARK_PURPLE
-            else -> ChatFormatting.YELLOW
-        }
-    }
-
     private fun normalize(name: String): String = name
         .lowercase()
-        .replace(" ", "_")
-        .replace("-", "_")
+        .replace(Regex("[^a-z0-9]+"), "")
         .replace("iv", "4")
         .replace("v", "5")
 
@@ -174,10 +163,10 @@ object FarmingRngOverlay : FeatureModule(
             } catch (_: Exception) {
                 null
             }
-            if (price != null) {
+            if (price != null && price > 0) {
                 prices[key] = price
                 synchronized(activeDrops) {
-                    activeDrops.firstOrNull { normalize(it.name) == key }?.value = price
+                    activeDrops.filter { normalize(it.name) == key }.forEach { it.value = price }
                 }
             }
             pending.remove(key)
@@ -185,26 +174,27 @@ object FarmingRngOverlay : FeatureModule(
     }
 
     private suspend fun lookupPrice(name: String): Long? = withContext(Dispatchers.IO) {
-        val bazaarId = when (normalize(name)) {
+        val normalized = normalize(name)
+        val bazaarId = when (normalized) {
             "cropie" -> "CROPIE"
             "helianthus" -> "HELIANTHUS"
             "squash" -> "SQUASH"
             "fermento" -> "FERMENTO"
-            "burrowing_spores" -> "BURROWING_SPORES"
-            "rooted_spores" -> "ROOTED_SPORES"
+            "burrowingspores" -> "BURROWING_SPORES"
+            "rootedspores" -> "ROOTED_SPORES"
             "cornucopia" -> "CORNUCOPIA"
-            "carrot_zest" -> "CARROT_ZEST"
+            "carrotzest" -> "CARROT_ZEST"
             "deepfries" -> "DEEPFRIES"
             "aggourdian" -> "AGGOURDIAN"
-            "cane_knot" -> "CANE_KNOT"
-            "melon_juice" -> "MELON_JUICE"
-            "cactus_flower" -> "CACTUS_FLOWER"
-            "designer_coffee_beans" -> "DESIGNER_COFFEE_BEANS"
+            "caneknot" -> "CANE_KNOT"
+            "melonjuice" -> "MELON_JUICE"
+            "cactusflower" -> "CACTUS_FLOWER"
+            "designercoffeebeans" -> "DESIGNER_COFFEE_BEANS"
             "feastfungus" -> "FEASTFUNGUS"
             "botroot" -> "BOTROOT"
-            "salted_sunflower_seeds" -> "SALTED_SUNFLOWER_SEEDS"
-            "crystalized_moonlight" -> "CRYSTALIZED_MOONLIGHT"
-            "floral_gelatin" -> "FLORAL_GELATIN"
+            "saltedsunflowerseeds" -> "SALTED_SUNFLOWER_SEEDS"
+            "crystalizedmoonlight" -> "CRYSTALIZED_MOONLIGHT"
+            "floralgelatin" -> "FLORAL_GELATIN"
             else -> null
         }
 
@@ -219,12 +209,17 @@ object FarmingRngOverlay : FeatureModule(
             }
         }
 
+        // Lowest BIN covers the non-Bazaar farming RNG drops. Compare normalized
+        // names so entries such as "DEDICATION_4" and "Dedication IV" resolve too.
         try {
             val json = URL.of(URI.create("https://moulberry.codes/lowestbin.json"), null).readText()
             val obj = JsonParser.parseString(json).asJsonObject
-            val target = name.lowercase()
             for ((key, value) in obj.entrySet()) {
-                if (key.lowercase() == target || key.lowercase().replace('_', ' ') == target) return@withContext value.asLong
+                val normalizedKey = normalize(key)
+                if (normalizedKey == normalized || normalizedKey.contains(normalized) || normalized.contains(normalizedKey)) {
+                    val candidate = value.asLong
+                    if (candidate > 0) return@withContext candidate
+                }
             }
         } catch (_: Exception) {
         }
@@ -246,7 +241,7 @@ object FarmingRngOverlay : FeatureModule(
     override fun doRender(context: GuiGraphicsExtractor) {
         val editing = Minecraft.getInstance().gui.screen() is GuiEditor
         val drops = if (editing) {
-            listOf(Drop(1, "Crystalized Moonlight", ChatFormatting.BLUE, 484_000L, Long.MAX_VALUE, 0L))
+            listOf(Drop(1, "Crystalized Moonlight", ChatFormatting.GREEN, 484_000L, Long.MAX_VALUE, 0L))
         } else {
             synchronized(activeDrops) { activeDrops.toList() }
         }
@@ -259,50 +254,24 @@ object FarmingRngOverlay : FeatureModule(
             val remaining = drop.shownUntil - now
             val progress = if (editing) 1f else when {
                 age < 200L -> (age / 200f).coerceIn(0f, 1f)
-                remaining < 250L -> (remaining / 250f).coerceIn(0f, 1f)
+                remaining < 250L -> (remaining / 250L).coerceIn(0f, 1f)
                 else -> 1f
             }
             val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
-            val valueText = when {
-                normalize(drop.name) == "seasoning" -> null
-                drop.value != null -> formatCoins(drop.value!! * drop.amount)
-                else -> "..."
-            }
+            val valueText = if (drop.value != null) formatCoins(drop.value!! * drop.amount) else "Loading..."
 
             context.pose().pushMatrix()
             context.pose().translate(0f, (y + yOffset).toFloat())
 
-            // Use the same bold, compact Minecraft pixel-font feel as the reference UI.
-            // The three passes give it a crisp dark outline and a small raised/depth effect.
             val text = componentBuilder {
-                appendWithColor("x${drop.amount} ${drop.name}", drop.color)
-                if (valueText != null) {
-                    append("  ")
-                    appendWithColor(valueText, ChatFormatting.GOLD)
-                }
+                appendWithColor("x${drop.amount} ${drop.name}", ChatFormatting.GREEN)
+                append("  ")
+                appendWithColor(valueText, ChatFormatting.YELLOW)
             }.copyIfNeeded().withStyle { it.withBold(true) }
 
-            context.text(
-                Minecraft.getInstance().font,
-                text,
-                2,
-                2,
-                0xB0000000.toInt()
-            )
-            context.text(
-                Minecraft.getInstance().font,
-                text,
-                1,
-                1,
-                0xFF111111.toInt()
-            )
-            context.text(
-                Minecraft.getInstance().font,
-                text,
-                0,
-                0,
-                -1
-            )
+            context.text(Minecraft.getInstance().font, text, 2, 2, 0xB0000000.toInt())
+            context.text(Minecraft.getInstance().font, text, 1, 1, 0xFF111111.toInt())
+            context.text(Minecraft.getInstance().font, text, 0, 0, -1)
 
             context.pose().popMatrix()
             y += Minecraft.getInstance().font.lineHeight + ROW_GAP
