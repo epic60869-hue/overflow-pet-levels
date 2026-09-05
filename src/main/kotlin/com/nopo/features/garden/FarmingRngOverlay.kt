@@ -15,6 +15,7 @@ import com.nopo.utils.Utils.append
 import com.nopo.utils.Utils.appendWithColor
 import com.nopo.utils.Utils.cleanColor
 import com.nopo.utils.Utils.componentBuilder
+import com.nopo.utils.Utils.copyIfNeeded
 import net.minecraft.ChatFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -279,7 +280,7 @@ object FarmingRngOverlay : FeatureModule(
                     append("  ")
                     appendWithColor(valueText, ChatFormatting.GOLD)
                 }
-            }.withStyle(ChatFormatting.BOLD)
+            }.copyIfNeeded().withStyle { it.withBold(true) }
 
             context.text(
                 Minecraft.getInstance().font,
