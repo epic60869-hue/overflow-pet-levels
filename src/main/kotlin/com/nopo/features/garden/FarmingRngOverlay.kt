@@ -25,10 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * Small SkyHanni-style notification for farming RNG drops.
- * Implemented independently for NopoMod.
- */
 object FarmingRngOverlay : FeatureModule(
     "farmingRngOverlay",
     NopoMod.config.farmingRngOverlay,
@@ -53,8 +49,6 @@ object FarmingRngOverlay : FeatureModule(
     private val prices = ConcurrentHashMap<String, Long>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
-    // Farming RNG/rare-drop items. The parser only accepts messages containing
-    // one of these names, so normal garden chat is not turned into popups.
     private val farmingDrops = setOf(
         "Cropie", "Squash", "Fermento", "Burrowing Spores", "Overgrown Grass", "Green Bandana",
         "Dedication IV", "Dedication 4", "Flowering Bouquet", "Rooted Spores", "Fruit Bowl",
@@ -216,8 +210,7 @@ object FarmingRngOverlay : FeatureModule(
         context.text(
             Minecraft.getInstance().font,
             componentBuilder {
-                append("${drop.amount}x ") { color = drop.color }
-                append(drop.name) { color = drop.color }
+                appendWithColor("${drop.amount}x ${drop.name}", drop.color)
                 append("  ")
                 appendWithColor(valueText, ChatFormatting.GOLD)
             },
