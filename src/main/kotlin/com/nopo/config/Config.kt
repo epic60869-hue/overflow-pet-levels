@@ -49,6 +49,9 @@ class Config {
     var rareCrop = ModuleConfig()
 
     @Expose
+    var farmingRngOverlay = PositionConfig(100, 100, 1f)
+
+    @Expose
     var tasks = TaskConfig()
 
     @Expose
