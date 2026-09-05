@@ -46,6 +46,7 @@ import com.nopo.features.dungeons.PartyFinderKickButton
 import com.nopo.features.emoji.EmojiReplace
 import com.nopo.features.fishing.TrophyFishDisplay
 import com.nopo.features.garden.AshwreathReminder
+import com.nopo.features.garden.FarmingRngOverlay
 import com.nopo.features.garden.RareCropTracker
 import com.nopo.features.inventory.EquipmentDisplay
 import com.nopo.features.inventory.ExperimentationRngDisplay
@@ -102,7 +103,6 @@ object NopoMod : ModInitializer {
         .toString()
         .toVersion() ?: Version(1, 0, 0)
 
-
     override fun onInitialize() {
         config = ConfigManager.init()
         rareCropConfig = ConfigManager.initRareCrops()
@@ -126,6 +126,7 @@ object NopoMod : ModInitializer {
 
             FarmingCategory,
             RareCropTracker,
+            FarmingRngOverlay,
 
             InventoryCategory,
             OverflowPetLevels,
