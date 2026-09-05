@@ -8,6 +8,7 @@ import com.nopo.events.GuiRendering
 import com.nopo.events.TickEvent
 import com.nopo.module.ConfigData
 import com.nopo.module.FeatureModule
+import com.nopo.screens.GuiEditor
 import com.nopo.utils.HypixelUtils
 import com.nopo.utils.IslandType
 import com.nopo.utils.Utils.append
@@ -66,8 +67,8 @@ object FarmingRngOverlay : FeatureModule(
         "Cultivating X", "Cultivating 10"
     )
 
-    // Supports both the older "RARE DROP! ..." messages and the newer
-    // Harvest Feast format, e.g. "RARE CROP! Crystalized Moonlight (+152)".
+    // Supports the newer Harvest Feast message, for example:
+    // "RARE CROP! Crystalized Moonlight (+152)".
     private val rngMessageRegex = Regex(
         "(?i)^(?:.*?\u00a7.)?(?:RARE CROP!|(?:VERY |CRAZY |PRAY TO RNGESUS |RNGESUS INCARNATE )?RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?)[ ]*(?<item>.+?)\\s*(?:\\(\\+[^)]*\\))?[! ]*$"
     )
@@ -101,17 +102,12 @@ object FarmingRngOverlay : FeatureModule(
         if (match != null) {
             item = match.groups["item"]?.value?.trim() ?: return null
         } else {
-            // Keep support for messages such as "RARE DROP! You found 2x Cropie!".
-            val rarity = raw.contains("RARE DROP", ignoreCase = true) ||
-                raw.contains("RNGESUS", ignoreCase = true)
+            val rarity = raw.contains("RARE DROP", ignoreCase = true) || raw.contains("RNGESUS", ignoreCase = true)
             if (!rarity) return null
-
             val older = olderDropRegex.find(raw) ?: return null
             item = older.groups["item"]?.value?.trim() ?: return null
         }
 
-        // The new RARE CROP message appends a farming-fortune amount such as
-        // "(+152)". It is not part of the item name/value.
         item = item.replace(Regex("\\s*\\(\\+[^)]*\\)\\s*$"), "").trim()
             .removeSuffix("!")
             .trim()
@@ -161,9 +157,7 @@ object FarmingRngOverlay : FeatureModule(
             if (price != null) {
                 prices[key] = price
                 val current = activeDrop
-                if (current != null && normalize(current.name) == key) {
-                    activeDrop = current.copy(value = price)
-                }
+                if (current != null && normalize(current.name) == key) activeDrop = current.copy(value = price)
             }
             pending.remove(key)
         }
@@ -208,40 +202,40 @@ object FarmingRngOverlay : FeatureModule(
             val obj = JsonParser.parseString(json).asJsonObject
             val target = name.lowercase()
             for ((key, value) in obj.entrySet()) {
-                if (key.lowercase() == target || key.lowercase().replace('_', ' ') == target) {
-                    return@withContext value.asLong
-                }
+                if (key.lowercase() == target || key.lowercase().replace('_', ' ') == target) return@withContext value.asLong
             }
         } catch (_: Exception) {
         }
-
         null
     }
 
     override fun onTick(totalTicks: Int) {
-        if (activeDrop != null && System.currentTimeMillis() > shownUntil) {
-            activeDrop = null
-        }
+        if (activeDrop != null && System.currentTimeMillis() > shownUntil) activeDrop = null
     }
 
     override fun render(context: GuiGraphicsExtractor) {
         if (!config.enabled) return
-        getConfig().pos.render(context) {
-            doRender(context)
-        }
+        getConfig().pos.render(context) { doRender(context) }
     }
 
     override fun doRender(context: GuiGraphicsExtractor) {
-        val drop = activeDrop ?: return
+        // Give the position editor a stable visual target even when no RNG drop
+        // has just happened. The preview follows the cursor because GuiEditor
+        // continuously updates Position before calling this renderer.
+        val editing = Minecraft.getInstance().gui.screen() is GuiEditor
+        val drop = activeDrop ?: if (editing) {
+            Drop(1, "Crystalized Moonlight", ChatFormatting.BLUE, 484_000L)
+        } else return
+
         val now = System.currentTimeMillis()
         val age = now - animationStart
         val remaining = shownUntil - now
-        val progress = when {
+        val progress = if (editing) 1f else when {
             age < 250L -> (age / 250f).coerceIn(0f, 1f)
             remaining < 400L -> (remaining / 400f).coerceIn(0f, 1f)
             else -> 1f
         }
-        val yOffset = ((1f - progress) * -8f).toInt()
+        val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
         val valueText = drop.value?.let { formatCoins(it * drop.amount) } ?: "..."
 
         context.pose().pushMatrix()
