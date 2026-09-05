@@ -21,6 +21,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.network.chat.Component
 import java.net.URI
 import java.net.URL
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -37,16 +38,21 @@ object FarmingRngOverlay : FeatureModule(
     )
 ), ChatEvent, GuiRendering, TickEvent {
 
+    private const val DROP_DURATION_MS = 3_000L
+    private const val ROW_GAP = 3
+
     private data class Drop(
-        val amount: Int,
+        var amount: Int,
         val name: String,
         val color: ChatFormatting,
-        val value: Long?
+        var value: Long?,
+        var shownUntil: Long,
+        var animationStart: Long,
     )
 
-    private var activeDrop: Drop? = null
-    private var shownUntil = 0L
-    private var animationStart = 0L
+    // New drops are inserted at the top. The list therefore reads newest -> oldest.
+    // The same item is merged into its existing row instead of creating another row.
+    private val activeDrops = CopyOnWriteArrayList<Drop>()
     private val prices = ConcurrentHashMap<String, Long>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
@@ -67,8 +73,6 @@ object FarmingRngOverlay : FeatureModule(
         "Cultivating X", "Cultivating 10"
     )
 
-    // Supports the newer Harvest Feast message, for example:
-    // "RARE CROP! Crystalized Moonlight (+152)".
     private val rngMessageRegex = Regex(
         "(?i)^(?:.*?\u00a7.)?(?:RARE CROP!|(?:VERY |CRAZY |PRAY TO RNGESUS |RNGESUS INCARNATE )?RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?)[ ]*(?<item>.+?)\\s*(?:\\(\\+[^)]*\\))?[! ]*$"
     )
@@ -85,12 +89,33 @@ object FarmingRngOverlay : FeatureModule(
 
         val raw = message.string.cleanColor().trim()
         val parsed = parseDrop(raw) ?: return
+        val now = System.currentTimeMillis()
         val key = normalize(parsed.second)
         val cachedValue = prices[key]
 
-        activeDrop = Drop(parsed.first, parsed.second, rarityColor(message), cachedValue)
-        shownUntil = System.currentTimeMillis() + 5000L
-        animationStart = System.currentTimeMillis()
+        synchronized(activeDrops) {
+            val existing = activeDrops.firstOrNull { normalize(it.name) == key }
+            if (existing != null) {
+                // Multiple copies of the same RNG drop are combined into one row.
+                existing.amount += parsed.first
+                existing.value = existing.value ?: cachedValue
+                // Refresh the 3 second lifetime from the latest copy.
+                existing.shownUntil = now + DROP_DURATION_MS
+                existing.animationStart = now
+            } else {
+                activeDrops.add(
+                    0,
+                    Drop(
+                        amount = parsed.first,
+                        name = parsed.second,
+                        color = rarityColor(message),
+                        value = cachedValue,
+                        shownUntil = now + DROP_DURATION_MS,
+                        animationStart = now,
+                    )
+                )
+            }
+        }
 
         if (cachedValue == null) requestPrice(parsed.second)
     }
@@ -156,8 +181,9 @@ object FarmingRngOverlay : FeatureModule(
             }
             if (price != null) {
                 prices[key] = price
-                val current = activeDrop
-                if (current != null && normalize(current.name) == key) activeDrop = current.copy(value = price)
+                synchronized(activeDrops) {
+                    activeDrops.firstOrNull { normalize(it.name) == key }?.value = price
+                }
             }
             pending.remove(key)
         }
@@ -210,7 +236,10 @@ object FarmingRngOverlay : FeatureModule(
     }
 
     override fun onTick(totalTicks: Int) {
-        if (activeDrop != null && System.currentTimeMillis() > shownUntil) activeDrop = null
+        val now = System.currentTimeMillis()
+        synchronized(activeDrops) {
+            activeDrops.removeIf { now >= it.shownUntil }
+        }
     }
 
     override fun render(context: GuiGraphicsExtractor) {
@@ -219,39 +248,44 @@ object FarmingRngOverlay : FeatureModule(
     }
 
     override fun doRender(context: GuiGraphicsExtractor) {
-        // Give the position editor a stable visual target even when no RNG drop
-        // has just happened. The preview follows the cursor because GuiEditor
-        // continuously updates Position before calling this renderer.
         val editing = Minecraft.getInstance().gui.screen() is GuiEditor
-        val drop = activeDrop ?: if (editing) {
-            Drop(1, "Crystalized Moonlight", ChatFormatting.BLUE, 484_000L)
-        } else return
+        val drops = if (editing) {
+            listOf(Drop(1, "Crystalized Moonlight", ChatFormatting.BLUE, 484_000L, Long.MAX_VALUE, 0L))
+        } else {
+            synchronized(activeDrops) { activeDrops.toList() }
+        }
+        if (drops.isEmpty()) return
 
         val now = System.currentTimeMillis()
-        val age = now - animationStart
-        val remaining = shownUntil - now
-        val progress = if (editing) 1f else when {
-            age < 250L -> (age / 250f).coerceIn(0f, 1f)
-            remaining < 400L -> (remaining / 400f).coerceIn(0f, 1f)
-            else -> 1f
-        }
-        val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
-        val valueText = drop.value?.let { formatCoins(it * drop.amount) } ?: "..."
+        var y = 0
+        for (drop in drops) {
+            val age = now - drop.animationStart
+            val remaining = drop.shownUntil - now
+            val progress = if (editing) 1f else when {
+                age < 200L -> (age / 200f).coerceIn(0f, 1f)
+                remaining < 250L -> (remaining / 250f).coerceIn(0f, 1f)
+                else -> 1f
+            }
+            val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
+            val valueText = drop.value?.let { formatCoins(it * drop.amount) } ?: "..."
 
-        context.pose().pushMatrix()
-        context.pose().translate(0f, yOffset.toFloat())
-        context.text(
-            Minecraft.getInstance().font,
-            componentBuilder {
-                appendWithColor("${drop.amount}x ${drop.name}", drop.color)
-                append("  ")
-                appendWithColor(valueText, ChatFormatting.GOLD)
-            },
-            0,
-            0,
-            -1
-        )
-        context.pose().popMatrix()
+            context.pose().pushMatrix()
+            context.pose().translate(0f, (y + yOffset).toFloat())
+            context.text(
+                Minecraft.getInstance().font,
+                componentBuilder {
+                    appendWithColor("x${drop.amount} ${drop.name}", drop.color)
+                    append("  ")
+                    appendWithColor(valueText, ChatFormatting.GOLD)
+                },
+                0,
+                0,
+                -1
+            )
+            context.pose().popMatrix()
+
+            y += Minecraft.getInstance().font.lineHeight + ROW_GAP
+        }
     }
 
     private fun formatCoins(value: Long): String = when {
