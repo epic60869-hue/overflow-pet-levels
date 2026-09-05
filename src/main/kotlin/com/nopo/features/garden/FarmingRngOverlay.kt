@@ -50,6 +50,11 @@ object FarmingRngOverlay : FeatureModule(
     private val pending = ConcurrentHashMap.newKeySet<String>()
 
     private val farmingDrops = setOf(
+        // Harvest Feast / Rare Crops
+        "Cornucopia", "Carrot Zest", "Deepfries", "Aggourdian", "Cane Knot", "Melon Juice",
+        "Cactus Flower", "Designer Coffee Beans", "Feastfungus", "Botroot", "Salted Sunflower Seeds",
+        "Crystalized Moonlight", "Floral Gelatin",
+        // Older farming RNG drops
         "Cropie", "Squash", "Fermento", "Burrowing Spores", "Overgrown Grass", "Green Bandana",
         "Dedication IV", "Dedication 4", "Flowering Bouquet", "Rooted Spores", "Fruit Bowl",
         "Atmospheric Filter", "Beady Eyes", "Clipped Wings", "Mantid Claw", "Wriggling Larva",
@@ -61,8 +66,13 @@ object FarmingRngOverlay : FeatureModule(
         "Cultivating X", "Cultivating 10"
     )
 
+    // Supports both the older "RARE DROP! ..." messages and the newer
+    // Harvest Feast format, e.g. "RARE CROP! Crystalized Moonlight (+152)".
     private val rngMessageRegex = Regex(
-        "(?i)(?:RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?).*?(?:you (?:found|dropped|got)|you received|drop(?:ped)?[: ]+)\\s*(?:an? |some )?(?<item>.+?)(?:!|$)"
+        "(?i)^(?:.*?\u00a7.)?(?:RARE CROP!|(?:VERY |CRAZY |PRAY TO RNGESUS |RNGESUS INCARNATE )?RARE DROP!?|VERY RARE DROP!?|CRAZY RARE DROP!?|PRAY TO RNGESUS!?|RNGESUS INCARNATE!?)[ ]*(?<item>.+?)\\s*(?:\\(\\+[^)]*\\))?[! ]*$"
+    )
+    private val olderDropRegex = Regex(
+        "(?i)(?:you (?:found|dropped|got)|you received|drop(?:ped)?[: ])\\s*(?:an? |some )?(?<item>.+?)(?:!|$)"
     )
     private val quantityRegex = Regex("(?i)^(?:x(?<x1>\\d+)\\s+|(?<x2>\\d+)x\\s+)(?<item>.+)$")
 
@@ -85,10 +95,28 @@ object FarmingRngOverlay : FeatureModule(
     }
 
     private fun parseDrop(raw: String): Pair<Int, String>? {
-        val match = rngMessageRegex.find(raw) ?: return null
-        var item = match.groups["item"]?.value?.trim()?.removeSuffix("!")?.trim() ?: return null
-        var amount = 1
+        val match = rngMessageRegex.find(raw)
+        var item: String
 
+        if (match != null) {
+            item = match.groups["item"]?.value?.trim() ?: return null
+        } else {
+            // Keep support for messages such as "RARE DROP! You found 2x Cropie!".
+            val rarity = raw.contains("RARE DROP", ignoreCase = true) ||
+                raw.contains("RNGESUS", ignoreCase = true)
+            if (!rarity) return null
+
+            val older = olderDropRegex.find(raw) ?: return null
+            item = older.groups["item"]?.value?.trim() ?: return null
+        }
+
+        // The new RARE CROP message appends a farming-fortune amount such as
+        // "(+152)". It is not part of the item name/value.
+        item = item.replace(Regex("\\s*\\(\\+[^)]*\\)\\s*$"), "").trim()
+            .removeSuffix("!")
+            .trim()
+
+        var amount = 1
         quantityRegex.matchEntire(item)?.let { quantity ->
             amount = quantity.groups["x1"]?.value?.toIntOrNull()
                 ?: quantity.groups["x2"]?.value?.toIntOrNull()
@@ -104,12 +132,11 @@ object FarmingRngOverlay : FeatureModule(
     }
 
     private fun rarityColor(message: Component): ChatFormatting {
-        val text = message.string
+        val text = message.toString()
         return when {
-            text.contains("§d") -> ChatFormatting.LIGHT_PURPLE
-            text.contains("§6") -> ChatFormatting.GOLD
-            text.contains("§5") -> ChatFormatting.DARK_PURPLE
-            text.contains("§b") -> ChatFormatting.AQUA
+            text.contains("RARE CROP", ignoreCase = true) -> ChatFormatting.BLUE
+            text.contains("CRAZY RARE", ignoreCase = true) -> ChatFormatting.LIGHT_PURPLE
+            text.contains("RNGESUS", ignoreCase = true) -> ChatFormatting.DARK_PURPLE
             else -> ChatFormatting.YELLOW
         }
     }
@@ -120,7 +147,6 @@ object FarmingRngOverlay : FeatureModule(
         .replace("-", "_")
         .replace("iv", "4")
         .replace("v", "5")
-        .replace("x", "10")
 
     private fun requestPrice(name: String) {
         val key = normalize(name)
@@ -150,6 +176,19 @@ object FarmingRngOverlay : FeatureModule(
             "fermento" -> "FERMENTO"
             "burrowing_spores" -> "BURROWING_SPORES"
             "rooted_spores" -> "ROOTED_SPORES"
+            "cornucopia" -> "CORNUCOPIA"
+            "carrot_zest" -> "CARROT_ZEST"
+            "deepfries" -> "DEEPFRIES"
+            "aggourdian" -> "AGGOURDIAN"
+            "cane_knot" -> "CANE_KNOT"
+            "melon_juice" -> "MELON_JUICE"
+            "cactus_flower" -> "CACTUS_FLOWER"
+            "designer_coffee_beans" -> "DESIGNER_COFFEE_BEANS"
+            "feastfungus" -> "FEASTFUNGUS"
+            "botroot" -> "BOTROOT"
+            "salted_sunflower_seeds" -> "SALTED_SUNFLOWER_SEEDS"
+            "crystalized_moonlight" -> "CRYSTALIZED_MOONLIGHT"
+            "floral_gelatin" -> "FLORAL_GELATIN"
             else -> null
         }
 
