@@ -254,7 +254,7 @@ object FarmingRngOverlay : FeatureModule(
             val remaining = drop.shownUntil - now
             val progress = if (editing) 1f else when {
                 age < 200L -> (age / 200f).coerceIn(0f, 1f)
-                remaining < 250L -> (remaining / 250L).coerceIn(0f, 1f)
+                remaining < 250L -> (remaining / 250f).coerceIn(0f, 1f)
                 else -> 1f
             }
             val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
