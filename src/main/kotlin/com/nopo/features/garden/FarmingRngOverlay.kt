@@ -31,9 +31,9 @@ object FarmingRngOverlay : FeatureModule(
     "farmingRngOverlay",
     NopoMod.config.farmingRngOverlay,
     ConfigData(
-        Component.literal("Farming RNG Overlay"),
+        Component.literal("Farming Drop Overlay"),
         componentBuilder {
-            append("Shows farming RNG drops with quantity, item name and value")
+            append("Shows farming drops with quantity, item name and value")
         }
     )
 ), ChatEvent, GuiRendering, TickEvent {
@@ -61,8 +61,8 @@ object FarmingRngOverlay : FeatureModule(
         "Cornucopia", "Carrot Zest", "Deepfries", "Aggourdian", "Cane Knot", "Melon Juice",
         "Cactus Flower", "Designer Coffee Beans", "Feastfungus", "Botroot", "Salted Sunflower Seeds",
         "Crystalized Moonlight", "Floral Gelatin",
-        // Older farming RNG drops
-        "Cropie", "Squash", "Fermento", "Burrowing Spores", "Overgrown Grass", "Green Bandana",
+        // Farming RNG drops
+        "Cropie", "Helianthus", "Seasoning", "Squash", "Fermento", "Burrowing Spores", "Overgrown Grass", "Green Bandana",
         "Dedication IV", "Dedication 4", "Flowering Bouquet", "Rooted Spores", "Fruit Bowl",
         "Atmospheric Filter", "Beady Eyes", "Clipped Wings", "Mantid Claw", "Wriggling Larva",
         "Locust Larva", "Squeaky Toy", "Squeaky Mousemat", "Vermin Vaporizer", "Synthesis",
@@ -96,10 +96,8 @@ object FarmingRngOverlay : FeatureModule(
         synchronized(activeDrops) {
             val existing = activeDrops.firstOrNull { normalize(it.name) == key }
             if (existing != null) {
-                // Multiple copies of the same RNG drop are combined into one row.
                 existing.amount += parsed.first
                 existing.value = existing.value ?: cachedValue
-                // Refresh the 3 second lifetime from the latest copy.
                 existing.shownUntil = now + DROP_DURATION_MS
                 existing.animationStart = now
             } else {
@@ -117,7 +115,8 @@ object FarmingRngOverlay : FeatureModule(
             }
         }
 
-        if (cachedValue == null) requestPrice(parsed.second)
+        // Seasoning has no price, so never try to resolve it remotely.
+        if (cachedValue == null && key != "seasoning") requestPrice(parsed.second)
     }
 
     private fun parseDrop(raw: String): Pair<Int, String>? {
@@ -192,6 +191,7 @@ object FarmingRngOverlay : FeatureModule(
     private suspend fun lookupPrice(name: String): Long? = withContext(Dispatchers.IO) {
         val bazaarId = when (normalize(name)) {
             "cropie" -> "CROPIE"
+            "helianthus" -> "HELIANTHUS"
             "squash" -> "SQUASH"
             "fermento" -> "FERMENTO"
             "burrowing_spores" -> "BURROWING_SPORES"
@@ -267,21 +267,47 @@ object FarmingRngOverlay : FeatureModule(
                 else -> 1f
             }
             val yOffset = if (editing) 0 else ((1f - progress) * -8f).toInt()
-            val valueText = drop.value?.let { formatCoins(it * drop.amount) } ?: "..."
+            val valueText = when {
+                normalize(drop.name) == "seasoning" -> null
+                drop.value != null -> formatCoins(drop.value!! * drop.amount)
+                else -> "..."
+            }
 
             context.pose().pushMatrix()
             context.pose().translate(0f, (y + yOffset).toFloat())
-            context.text(
-                Minecraft.getInstance().font,
-                componentBuilder {
-                    appendWithColor("x${drop.amount} ${drop.name}", drop.color)
+
+            val text = componentBuilder {
+                appendWithColor("x${drop.amount} ${drop.name}", drop.color)
+                if (valueText != null) {
                     append("  ")
                     appendWithColor(valueText, ChatFormatting.GOLD)
-                },
+                }
+            }
+
+            // Give the overlay a small raised/outlined look instead of flat text.
+            // Two dark offset passes create a readable depth/shadow without a box around it.
+            context.text(
+                Minecraft.getInstance().font,
+                text,
+                2,
+                2,
+                0x90000000.toInt()
+            )
+            context.text(
+                Minecraft.getInstance().font,
+                text,
+                1,
+                1,
+                0xFF000000.toInt()
+            )
+            context.text(
+                Minecraft.getInstance().font,
+                text,
                 0,
                 0,
                 -1
             )
+
             context.pose().popMatrix()
 
             y += Minecraft.getInstance().font.lineHeight + ROW_GAP
